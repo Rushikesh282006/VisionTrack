@@ -1,0 +1,16 @@
+# Core Deep Learning & Computer Vision
+torch>=2.1.0
+torchvision>=0.16.0
+opencv-python>=4.8.0
+ultralytics>=8.0.0
+
+# Scientific & Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+Pillow>=10.0.0
+matplotlib>=3.7.0
+pyyaml>=6.0.0
+
+# System & Utilities
+psutil>=5.9.0
+
