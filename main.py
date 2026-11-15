@@ -41,8 +41,8 @@ def main() -> None:
     print("           DETECTION RESULTS")
     print("=" * 45)
     high_conf_detections = [det for det in result.detections if det.confidence > 0.85]
+    
     for det in high_conf_detections:
-
         print(
             f"Object: {det.class_name:<12} | "
             f"Confidence: {det.confidence:.2f} | "

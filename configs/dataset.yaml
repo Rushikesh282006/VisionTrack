@@ -1,0 +1,44 @@
+# VisionTrack - KITTI Dataset Configuration
+
+paths:
+  raw_dir: "data/raw/kitti"
+  processed_dir: "data/processed/kitti_yolo"
+  raw_labels_dir: "data/raw/kitti/training/label_2"
+  raw_images_dir: "data/raw/kitti/training/image_2"
+
+# KITTI class ontology to VisionTrack YOLO class ID mapping
+# Target classes: car (0), truck (1), bus (2), pedestrian (3), cyclist (4)
+class_mapping:
+  Car: 0
+  Van: 0
+  Truck: 1
+  Tram: 2
+  Pedestrian: 3
+  Person_sitting: 3
+  Cyclist: 4
+
+# Classes ignored during training (DontCare indicates ambiguous distant objects)
+ignore_classes:
+  - "DontCare"
+  - "Misc"
+
+# Target YOLO Class Names
+names:
+  0: "car"
+  1: "truck"
+  2: "bus"
+  3: "pedestrian"
+  4: "cyclist"
+
+# Dataset Partitioning Strategy
+split:
+  train: 0.80
+  val: 0.10
+  test: 0.10
+  random_seed: 42
+
+# Defensive Quality Bounds
+validation:
+  min_box_dimension_px: 2.0
+  norm_coord_min: 0.0
+  norm_coord_max: 1.0
