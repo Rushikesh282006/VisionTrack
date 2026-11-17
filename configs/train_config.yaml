@@ -1,0 +1,26 @@
+# Model and dataset
+
+model: "yolo26n.pt"
+
+data: "configs/traffic_kitti.yaml"
+
+# Training Parameters
+
+epochs: 3
+batch: 32
+imgsz: 640
+freeze: 10
+
+# Optimizer and Leraning Rate
+
+optimizer: "AdamW"
+lr0: 0.01
+lrf: 0.01
+momentum: 0.937
+weight_decay: 0.0005
+
+# Data Augmentation
+
+mosaic: 1.0
+mixup: 0.1
+close_mosaic: 1
