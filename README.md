@@ -9,7 +9,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED.svg)](https://www.docker.com/)
 [![Tests](https://img.shields.io/badge/tests-34%20passed-brightgreen.svg)]()
 
-VisionTrack is a portfolio-grade Computer Vision and Intelligent Transportation System (ITS) engineered for real-time edge traffic monitoring, multi-class vehicle detection, multi-object tracking (MOT), virtual tripwire counting, and live HUD telemetry analytics.
+VisionTrack is a  Computer Vision and Intelligent Transportation System (ITS) engineered for real-time edge traffic monitoring, multi-class vehicle detection, multi-object tracking (MOT), virtual tripwire counting, and live HUD telemetry analytics.
 
 ---
 
