@@ -1,3 +1,4 @@
+from networkx.algorithms.bipartite import color
 def kitti_bbox_to_yolo(
     bbox: tuple[float, float, float, float], 
     img_width: int, 
@@ -345,7 +346,7 @@ def associate_detections_to_tracks(
         return [], list(range(num_tracks)), list(range(num_detections))
 
 
-    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+    row_ind, col_ind = 1,2 #linear_sum_assignment(cost_matrix)
     matches = []
 
     for r,c in zip(row_ind,col_ind):
@@ -522,3 +523,216 @@ class VehicleCounter:
         total = total_in + total_out
 
         return {"incoming":total_in,"outgoing":total_out,"total":total}
+
+
+#Day 5
+
+import cv2
+import numpy as np
+
+Point = tuple[float, float]
+
+def draw_track_trail(
+    image: np.ndarray,
+    history: list[Point],
+    color: tuple[int, int, int] = (0, 255, 255),  # Yellow trail in BGR
+    thickness: int = 2
+) -> np.ndarray:
+    """
+    Draws a motion trail connecting the recent history points of a tracked vehicle.
+
+    Args:
+        image: BGR image array.
+        history: List of (cx, cy) center points.
+        color: BGR color tuple.
+        thickness: Line thickness in pixels.
+
+    Returns:
+        np.ndarray: Image with the trajectory polyline rendered.
+    """
+    # If there are fewer than 2 points, we can't draw a line connecting them!
+    if len(history) < 2:
+        return image
+
+    # Loop through consecutive pairs of points (history[i - 1] to history[i])
+    # and draw lines using cv2.line(image, pt1, pt2, color, thickness)
+    for i in range(1, len(history)):
+        pt1 = (int(history[i - 1][0]),int(history[i - 1][1]))
+        pt2 = (int(history[i][0]),int(history[i][1]))
+        cv2.line(image, pt1, pt2, color, thickness)
+
+    return image
+    
+def render_pipeline_hud(
+    frame: np.ndarray,
+    tracks: list,
+    tripwire_start: tuple[float, float],
+    tripwire_end: tuple[float, float],
+    counts: dict,
+    fps: float,
+    class_names: dict[int, str]
+) -> np.ndarray:
+    """
+    Renders all visual telemetry:
+    1. Motion trails for each track.
+    2. Bounding boxes & ID labels.
+    3. The tripwire line.
+    4. Top telemetry dashboard banner with live FPS and traffic stats.
+    """
+    canvas = frame.copy()
+    h, w = canvas.shape[:2]
+
+    # Step 1: Draw Tripwire Line (Red: (0, 0, 255))
+    # Step 2: For each track, draw trail, bounding box, and ID pill
+    # Step 3: Draw semi-transparent HUD banner at the top (y from 0 to 80)
+    # Step 4: Put text for FPS and Counts
+
+    p1 = (int(tripwire_start[0]), int(tripwire_start[1]))
+    p2 = (int(tripwire_end[0]), int(tripwire_end[1]))
+
+    cv2.line(canvas, p1, p2, (0, 0, 255), 3, lineType=cv2.LINE_AA)
+    cv2.putText(canvas, "TRIPWIRE", (p1[0] + 5, p1[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+    
+    for t in tracks:
+        if t.state == "Tracked":
+            x1, y1, x2, y2 = [int(v) for v in t.bbox]
+            cv2.rectangle(canvas, (x1, y1), (x2, y2), (0, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(canvas, f"ID:{t.track_id}", max((x1, y1 - 8),15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+            draw_track_trail(canvas, t.history)
+    
+    overlay = canvas.copy()
+    cv2.rectangle(overlay, (0, 0), (w, 75), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.5, canvas, 0.5, 0, canvas)
+
+    t1 = f"VISIONTRACK ITS  |  FPS: {fps:.1f}  |  ACTIVE: {len(tracks)}"
+    t2 = f"INCOMING: {counts.get('incoming', 0)}  |  OUTGOING: {counts.get('outgoing', 0)}  |  TOTAL: {counts.get('total', 0)}"
+
+    cv2.putText(canvas, t1, (15, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(canvas, t2, (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2, cv2.LINE_AA)
+
+    return canvas
+
+
+
+
+
+import time
+from pathlib import Path
+from typing import Optional
+
+class VideoPipeline:
+    """
+    End-to-end video processing engine integrating Detection, Tracking,
+    Virtual Tripwire Counting, and Live HUD Rendering.
+    """
+    def __init__(
+        self,
+        detector,               # YOLODetector instance
+        tracker,                # SimpleTracker instance
+        counter,                # VehicleCounter instance
+        class_names: dict[int, str]
+    ):
+        self.detector = detector
+        self.tracker = tracker
+        self.counter = counter
+        self.class_names = class_names
+
+    def process_video(
+        self,
+        input_path: str,
+        output_path: Optional[str] = None,
+        max_frames: Optional[int] = None
+    ) -> dict:
+        """
+        Runs the full pipeline on a video file and saves annotated MP4.
+        
+        Returns:
+            dict: Summary metrics (total_frames, avg_fps, final_counts).
+        """
+        # Step 1: Open cv2.VideoCapture(input_path)
+        # Step 2: Read width, height, fps
+        # Step 3: Initialize cv2.VideoWriter if output_path is provided
+        # Step 4: Loop frames:
+        #         - Measure t_start
+        #         - detector.predict -> format detections as [((xmin, ymin, xmax, ymax), cls_id, conf), ...]
+        #         - tracker.update(detections) -> active tracks
+        #         - counter.update(tracks) -> counts
+        #         - render_pipeline_hud -> annotated frame
+        #         - writer.write(annotated)
+        #         - update FPS
+        # Step 5: cap.release(), writer.release()
+        # Instead of: with open(input_path) as file:
+        cap = cv2.VideoCapture(input_path)
+        if not cap.isOpened():
+            raise FileNotFoundError(f"Could not open video at: {input_path}")
+
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
+
+        writer = None
+
+        if output_path:
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            writer = cv2.VideoWriter(output_path,fourcc,fps,(width,height))
+
+
+        
+        frame_count = 0
+        total_time = 0.0
+
+        while cap.isOpened():
+            if max_frames and frame_count >= max_frames:
+                break
+
+            ret, frame = cap.read()
+            if not ret:
+                break  # Reached the end of the video!
+
+            frame_count += 1
+
+            t_start = time.perf_counter()
+
+            # 1. DETECT: Run detector on the frame
+            det_result = self.detector.predict(frame, imgsz=640, return_annotated=False)
+            # Format for tracker: list of (bbox, class_id, confidence)
+            detections = [(d.bbox, d.class_id, d.confidence) for d in det_result.detections]
+
+            # 2. TRACK: Feed detections into tracker
+            tracks = self.tracker.update(detections)
+
+            # 3. COUNT: Check for tripwire line crossings
+            counts = self.counter.update(tracks)
+
+            # Calculate instantaneous FPS
+            t_elapsed = time.perf_counter() - t_start
+            total_time += t_elapsed
+            fps_current = 1.0 / max(t_elapsed, 1e-5)
+
+            # 4. RENDER: Draw the HUD, boxes, and trails using render_pipeline_hud
+            annotated = render_pipeline_hud(
+                frame=frame,
+                tracks=tracks,
+                tripwire_start=self.counter.line_start,
+                tripwire_end=self.counter.line_end,
+                counts=counts,
+                fps=fps_current,
+                class_names=self.class_names
+            )
+
+            if writer:
+                writer.write(annotated)
+
+
+        cap.release()
+
+        if writer:
+            writer.release()
+
+        avg_fps = frame_count / max(total_time, 1e-5)
+        return {
+            "frames_processed": frame_count,
+            "avg_fps": avg_fps,
+            "counts": counts
+        }

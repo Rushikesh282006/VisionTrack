@@ -6,6 +6,7 @@ Real-Time Intelligent Traffic Monitoring and Vehicle Detection System.
 
 from src.detection import YOLODetector, Detection, DetectionResult
 from src.utils import setup_logger, get_device, validate_image_path, Timer
+from src.pipeline import VideoPipeline, draw_track_trail, render_pipeline_hud
 
 __all__ = [
     "YOLODetector",
@@ -15,5 +16,8 @@ __all__ = [
     "get_device",
     "validate_image_path",
     "Timer",
+    "VideoPipeline",
+    "draw_track_trail",
+    "render_pipeline_hud",
 ]
 
