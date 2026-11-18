@@ -45,11 +45,12 @@ def find_weights() -> Path:
         Path("yolo26n.pt"),
         Path("weights/best.pt"),
         Path("models/yolov8n.pt"),
+        Path("yolov8n.pt"),
     ]
     for c in candidates:
         if c.exists():
             return c
-    return candidates[0]
+    return Path("yolov8n.pt")
 
 
 @asynccontextmanager

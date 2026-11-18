@@ -23,6 +23,10 @@ class TestVisionTrackAPI(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.client_cm.__exit__(None, None, None)
+        temp_dir = Path("outputs/test_temp")
+        if temp_dir.exists():
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     def test_root_endpoint(self):
         """Tests that GET / returns service status and docs URL."""

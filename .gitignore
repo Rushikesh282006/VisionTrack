@@ -7,3 +7,5 @@ runs/
 data/raw/
 data/processed/
 models/*.pt
+outputs/test_temp/
+.vscode/

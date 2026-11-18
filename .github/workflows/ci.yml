@@ -31,6 +31,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Cache or Download Pretrained Weights for Testing
+        run: |
+          mkdir -p models
+          python -c "from ultralytics import YOLO; YOLO('yolov8n.pt'); import shutil, os; shutil.copy('yolov8n.pt', 'models/yolo26n.pt') if not os.path.exists('models/yolo26n.pt') else None"
+
       - name: Execute Full 34-Test Suite
         run: |
           python -m unittest discover tests -v

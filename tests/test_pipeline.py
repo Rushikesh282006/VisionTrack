@@ -33,6 +33,13 @@ class DummyDetector:
 
 class TestDay5VideoPipeline(unittest.TestCase):
 
+    @classmethod
+    def tearDownClass(cls):
+        temp_dir = Path("outputs/test_temp")
+        if temp_dir.exists():
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def setUp(self):
         self.canvas = np.zeros((300, 400, 3), dtype=np.uint8)
         self.class_names = {0: "car", 1: "truck", 2: "bus"}
