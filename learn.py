@@ -283,3 +283,242 @@ def validate_yolo_line(
 
 
 
+import numpy as np
+# You can import your compute_iou from src.training!
+from src.training.metrics import compute_iou
+
+def compute_iou_cost_matrix(
+    tracks_boxes: list[tuple[float, float, float, float]],
+    detections_boxes: list[tuple[float, float, float, float]]
+) -> np.ndarray:
+    """
+    Computes an (M, N) cost matrix where cost[i, j] = 1.0 - IoU(track_i, det_j).
+    
+    Args:
+        tracks_boxes: List of M boxes (xmin, ymin, xmax, ymax) from existing tracks.
+        detections_boxes: List of N boxes (xmin, ymin, xmax, ymax) from new detections.
+        
+    Returns:
+        np.ndarray: Matrix of shape (M, N) containing float costs in [0.0, 1.0].
+                    If either input list is empty, return an empty array with matching shape.
+    """
+    # Your implementation here
+    rows,cols = len(tracks_boxes),len(detections_boxes)
+
+    if not tracks_boxes or not detections_boxes:
+        return np.zeros((rows,cols))
+
+    cost_matrix = np.zeros((rows, cols), dtype=np.float32)
+
+    for i in range(rows):
+        for j in range(cols):
+            cost_matrix[i][j] = 1.0 - compute_iou(tracks_boxes[i],detections_boxes[j])
+
+        
+    return cost_matrix
+
+
+
+
+# from scipy.optimize import linear_sum_assignment
+
+def associate_detections_to_tracks(
+    cost_matrix: np.ndarray,
+    max_cost: float = 0.7
+) -> tuple[list[tuple[int, int]], list[int], list[int]]:
+    """
+    Associates tracks with detections using Hungarian Algorithm with cost gating.
+    
+    Args:
+        cost_matrix: (M, N) matrix of costs.
+        max_cost: Threshold above which a match is rejected (default 0.7 -> IoU < 0.3).
+        
+    Returns:
+        matches: List of tuples (track_idx, det_idx) for valid matches.
+        unmatched_tracks: List of track indices that have no valid match.
+        unmatched_detections: List of detection indices that have no valid match.
+    """
+    # Your implementation here
+    num_tracks, num_detections = cost_matrix.shape
+
+    if num_tracks == 0 or num_detections == 0:
+        return [], list(range(num_tracks)), list(range(num_detections))
+
+
+    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+    matches = []
+
+    for r,c in zip(row_ind,col_ind):
+        if cost_matrix[r,c] <= max_cost:
+            matches.append((r,c))
+
+    matched_tracks = {r for r, c in matches}
+    matched_detections = {c for r, c in matches}
+
+    unmatched_tracks = [i for i in range(num_tracks) if i not in matched_tracks]
+    unmatched_detections = [j for j in range(num_detections) if j not in matched_detections]
+    
+    return (matches,unmatched_tracks,unmatched_detections)
+
+
+class Track:
+    """
+    Represents a single tracked vehicle across time.
+    """
+    def __init__(
+        self,
+        track_id: int,
+        bbox: tuple[float, float, float, float],
+        class_id: int,
+        confidence: float
+    ):
+        self.track_id = track_id
+        self.bbox = bbox
+        self.class_id = class_id
+        self.confidence = confidence
+        self.state = "New"       # "New", "Tracked", "Lost", "Removed"
+        self.hits = 1
+        self.lost_frames = 0
+        
+        # Center point (cx, cy)
+        cx = (bbox[0] + bbox[2]) / 2.0
+        cy = (bbox[1] + bbox[3]) / 2.0
+        self.history: list[tuple[float, float]] = [(cx, cy)]
+
+    def update(self, bbox: tuple[float, float, float, float], confidence: float):
+        """Called when this track is successfully matched to a detection."""
+        # 1. Update self.bbox and self.confidence
+        # 2. Reset self.lost_frames to 0
+        # 3. Increment self.hits by 1
+        # 4. If self.hits >= 2, set self.state to "Tracked"
+        # 5. Compute new center (cx, cy) and append to self.history
+        self.lost_frames = 0
+
+        self.bbox = bbox
+        self.confidence = confidence
+
+        self.hits += 1
+
+        if self.hits >= 2:
+            self.state = "Tracked"
+
+        new_cx = (bbox[0]+bbox[2]) / 2.0
+        new_cy = (bbox[1]+bbox[3]) / 2.0
+
+        self.history.append((new_cx,new_cy))
+
+
+        if len(self.history) > 30:
+            self.history.pop(0)
+
+    def mark_missed(self, max_lost_frames: int = 30):
+        """Called when this track is NOT matched in the current frame."""
+        # 1. Increment self.lost_frames by 1
+        # 2. If self.lost_frames > max_lost_frames, set self.state to "Removed"
+        # 3. Otherwise, set self.state to "Lost"
+        
+        self.lost_frames += 1
+
+        if self.state == "New":
+            self.state = "Removed"
+        elif self.lost_frames > max_lost_frames:
+            self.state = "Removed"
+        else:
+            self.state = "Lost"       
+
+
+Point = tuple[float, float]
+
+def ccw(A: Point, B: Point, C: Point) -> float:
+    """Computes orientation of triplet (A, B, C)."""
+    return (B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0])
+
+def do_segments_intersect(A: Point, B: Point, C: Point, D: Point) -> bool:
+    """
+    Returns True if line segment AB intersects line segment CD.
+    """
+    # 1. Check if C and D are on opposite sides of AB
+    # 2. Check if A and B are on opposite sides of CD
+    # (Hint: If two numbers have opposite signs, their product is negative or (ccw1 > 0 != ccw2 > 0))ab = ccw(A,B,C)
+    # True if one is > 0 and the other is NOT > 0 (opposite signs!)
+    cd_opposite = (ccw(A, B, C) > 0) != (ccw(A, B, D) > 0)
+    ab_opposite = (ccw(C, D, A) > 0) != (ccw(C, D, B) > 0)
+
+    return cd_opposite and ab_opposite
+        
+
+
+class VehicleCounter:
+    """
+    Directional vehicle counter using a virtual tripwire line.
+    """
+    def __init__(
+        self,
+        line_start: tuple[float, float],
+        line_end: tuple[float, float],
+        class_names: dict[int, str] = {0: "car", 1: "truck", 2: "bus", 3: "pedestrian", 4: "cyclist"}
+    ):
+        self.line_start = line_start
+        self.line_end = line_end
+        self.class_names = class_names
+        
+        # Set to prevent counting the same vehicle multiple times
+        self.counted_ids: set[int] = set()
+        
+        # Dictionary storing counts by direction and category
+        self.counts = {
+            "incoming": {name: 0 for name in class_names.values()},
+            "outgoing": {name: 0 for name in class_names.values()}
+        }
+
+    def update(self, tracks: list[Track]) -> dict:
+        """
+        Checks active tracks against the tripwire line and updates counts.
+
+        Returns:
+            dict: Summary with {"incoming": ..., "outgoing": ..., "total": ...}
+        """
+        # Step 1: Loop through each track in tracks
+        #
+        # Step 2: Skip conditions:
+        #   - If track.track_id is already in self.counted_ids: continue
+        #   - If track.state != "Tracked": continue (ignore unconfirmed noise)
+        #   - If len(track.history) < 2: continue (need 2 points to form a line)
+        #
+        # Step 3: Extract points:
+        #   prev_pt = track.history[-2]
+        #   curr_pt = track.history[-1]
+        #
+        # Step 4: Check if motion segment crossed the tripwire:
+        #   if do_segments_intersect(prev_pt, curr_pt, self.line_start, self.line_end):
+        #       - Add track.track_id to self.counted_ids
+        #       - Determine direction:
+        #           "incoming" if curr_pt[1] > prev_pt[1] else "outgoing"
+        #       - Get class name: self.class_names.get(track.class_id, "car")
+        #       - Increment self.counts[direction][cls_name] += 1
+        #
+        # Step 5: Compute total count and return summary dictionary
+        for track in tracks:
+            if track.track_id in self.counted_ids or track.state != "Tracked" or len(track.history) < 2:
+                continue
+            else:
+                prev_pt = track.history[-2]
+                curr_pt = track.history[-1]
+
+                if do_segments_intersect(prev_pt,curr_pt,self.line_start,self.line_end):
+
+                    self.counted_ids.add(track.track_id)
+
+                    direction = "incoming" if curr_pt[1] > prev_pt[1] else "outgoing"
+
+                    class_name = self.class_names.get(track.class_id,"car")
+
+                    self.counts[direction][class_name] += 1
+
+        total_in = sum(self.counts["incoming"].values())
+
+        total_out = sum(self.counts["outgoing"].values())
+
+        total = total_in + total_out
+
+        return {"incoming":total_in,"outgoing":total_out,"total":total}

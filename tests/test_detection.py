@@ -13,7 +13,8 @@ class TestVisionTrackDay1(unittest.TestCase):
     def setUp(self):
         self.project_root = Path(__file__).resolve().parent.parent
         self.sample_image = self.project_root / "data" / "samples" / "bus.jpg"
-        self.model_path = self.project_root / "yolo26n.pt"
+        model_candidate = self.project_root / "models" / "yolo26n.pt"
+        self.model_path = model_candidate if model_candidate.exists() else (self.project_root / "yolo26n.pt")
 
     def test_validate_image_path_success(self):
         """Tests that a valid existing image path is resolved correctly."""
@@ -34,6 +35,8 @@ class TestVisionTrackDay1(unittest.TestCase):
 
     def test_yolo_detector_inference(self):
         """Tests end-to-end detector prediction on CPU."""
+        if not self.model_path.exists():
+            self.skipTest(f"Model checkpoint not found at {self.model_path}")
         detector = YOLODetector(
             model_path=self.model_path,
             device="cpu",
