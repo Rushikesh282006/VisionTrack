@@ -1,0 +1,31 @@
+# Git and IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Python Environments & Bytecode
+.venv
+env/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Dataset Archives & Raw Data
+data/raw/
+*.zip
+*.tar.gz
+
+# Output Artifacts & Scratch
+outputs/test_temp/
+outputs/demo/
+learn.py
+
+# Docker & CI
+Dockerfile*
+docker-compose*
+.github

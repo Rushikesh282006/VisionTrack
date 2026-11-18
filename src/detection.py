@@ -81,6 +81,7 @@ class YOLODetector:
         image_source: Union[str, Path, np.ndarray],
         imgsz: int = 640,
         return_annotated: bool = True,
+        conf_threshold: Optional[float] = None,
     ) -> DetectionResult:
         """
         Runs inference on an image path or loaded numpy array.
@@ -89,6 +90,7 @@ class YOLODetector:
             image_source: File path or loaded BGR image array.
             imgsz: Input resolution square dimension (e.g. 640, 416, 320).
             return_annotated: Whether to render bounding boxes onto the frame.
+            conf_threshold: Optional per-request confidence threshold override.
 
         Returns:
             DetectionResult instance containing parsed detections and latency.
@@ -100,12 +102,14 @@ class YOLODetector:
         else:
             source_input = image_source
 
+        active_conf = conf_threshold if conf_threshold is not None else self.conf_threshold
+
         with Timer() as timer:
             results = self.model.predict(
                 source=source_input,
                 device=self.device,
                 imgsz=imgsz,
-                conf=self.conf_threshold,
+                conf=active_conf,
                 iou=self.iou_threshold,
                 save=False,
                 verbose=False,

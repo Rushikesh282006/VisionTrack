@@ -736,3 +736,118 @@ class VideoPipeline:
             "avg_fps": avg_fps,
             "counts": counts
         }
+
+
+
+
+
+
+#Day 6
+
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class BoundingBox(BaseModel):
+    xmin: float
+    ymin: float
+    xmax: float
+    ymax: float
+
+class DetectionItem(BaseModel):
+    class_id: int
+    class_name: str
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    box: BoundingBox
+
+class DetectionResponse(BaseModel):
+    success: bool = True
+    total_detections: int
+    class_counts: dict[str, int]
+    inference_time_ms: float
+    detections: list[DetectionItem]
+
+class HealthResponse(BaseModel):
+    status: str = "healthy"
+    device: Literal["cpu","cuda","cuda:0"] = "cpu"
+    model_loaded: bool = True
+    uptime_seconds: float
+
+
+
+import cv2
+import numpy as np
+from fastapi import FastAPI, UploadFile, File, HTTPException
+import time
+
+APP_START_TIME = time.time() 
+app = FastAPI(title="VisionTrack API", version="1.0.0")
+
+
+
+@app.get("/health",response_model=HealthResponse)
+def health_check():
+    uptime = time.time() - APP_START_TIME
+    return HealthResponse(uptime_seconds=round(uptime,2))
+
+@app.post("/detect/image", response_model=DetectionResponse)
+async def detect_image(
+    file: UploadFile = File(...),
+    conf_threshold: float = 0.25
+):
+    # Step 1 & 2: Read bytes and decode
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if img is None:
+        raise HTTPException(status_code=400, detail="Invalid or corrupted image format.")
+
+    # Step 3: Run YOLO detection on the decoded BGR image
+    result = detector.predict(img, imgsz=640, return_annotated=False)
+
+    # Step 4: Convert detections into Pydantic models
+    items = []
+    for d in result.detections:
+        x1, y1, x2, y2 = d.box
+        items.append(
+            DetectionItem(
+                class_id=d.class_id,
+                class_name=d.class_name,
+                confidence=round(d.confidence, 4),
+                box=BoundingBox(xmin=x1, ymin=y1, xmax=x2, ymax=y2)
+            )
+        )
+
+    # Step 5: Return validated response
+    return DetectionResponse(
+        total_detections=len(items),
+        class_counts=result.count_by_class(),
+        inference_time_ms=round(result.inference_time_ms, 2),
+        detections=items
+    )
+
+
+import streamlit as st
+from src.detection import YOLODetector
+from src.utils import get_device
+from pathlib import Path
+
+@st.cache_resource
+def get_cached_detector():
+    model_path = Path("models/yolo26n.pt") if Path("models/yolo26n.pt").exists() else Path("yolo26n.pt")
+    return YOLODetector(model_path=model_path, device=get_device())
+
+# 2. Sidebar controls
+def setup_sidebar():
+    """
+    Renders sidebar controls and returns user parameter settings.
+    Returns:
+        dict: {"mode": ..., "conf_threshold": ..., "tripwire_ratio": ...}
+    """
+    st.sidebar.title("VisionTrack ITS")
+    mode = st.sidebar.selectbox("Select Mode", ["Image Detection", "Video Tracking", "Live Demo"]) 
+    conf_threshold = st.sidebar.slider("Confidence Threshold", min_value=0.1, max_value=0.9, value=0.25, step=0.05)
+    tripwire_ratio = st.sidebar.slider("Tripwire Position (%)", min_value=20, max_value=80, value=55, step=5) / 100
+    
+
+    return {"mode":mode,"conf_threshold":conf_threshold,"tripwire_ratio":tripwire_ratio}
